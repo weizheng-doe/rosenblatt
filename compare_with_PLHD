@@ -1,0 +1,117 @@
+## The design area of is 
+  ## when y=5:  4<x<24
+  ## when y=11: 1<x<10
+  ## when y=9:  15<x<21
+  ## when y=16: 2<x<16
+
+s=6;
+
+
+## generate a large data
+col1=NULL # x is generated proportional to the length, i.e., 20,9,6,14.
+col1=append(col1,runif(20000,4,24))
+col1=append(col1,runif(9000,1,10))
+col1=append(col1,runif(6000,15,21))
+col1=append(col1,runif(14000,2,16))
+col2=c(rep(5,20000),rep(11,9000),rep(9,6000),rep(16,14000))
+m=cbind(col1,col2)
+
+## A unified sample size n
+n=40
+
+## Define the function.
+blackbox<-function(x){
+  return(    ( (30+5*x[1]/24*sin(5*x[1]/24))*(4+exp(-5*x[2]/16))-100 )/6   )
+}
+
+## True mean
+true_mean=mean(sapply(1:49000,function(x){blackbox(m[x,])}))
+
+## second dimension projection
+proj<-function(x){
+  if(1<=x&&x<2){return(c(11))}
+  if(2<=x&&x<4){return(c(11,16))}
+  if(4<=x&&x<10){return(c(5,11,16))}
+  if(10<=x&&x<15){return(c(5,16))}
+  if(15<=x&&x<16){return(c(5,9,16))}
+  if(16<=x&&x<21){return(c(5,9))}
+  if(21<=x&&x<=24){return(c(5))}
+}
+
+## random sampling estimation
+result.rnd<-NULL
+for(hh in 1:100){
+  labelvector<-sample(1:49000,n,replace = FALSE)
+  response_vector=sapply(1:n,function(x){blackbox(m[labelvector[x],])})
+  mean_rnd=mean(response_vector)
+  result.rnd<-append(result.rnd,mean_rnd)
+}
+
+## PLHD estimation
+result.plhd<-NULL
+for(hh in 1:100){
+  col1=(sample(1:n,n,replace = FALSE)-0.5)/n*23+1
+  col2=sapply(1:n,function(x){sample(proj(col1[x]),1)})
+  d_plhd=cbind(col1,col2)
+  response_vector=sapply(1:n,function(x){blackbox(d_plhd[x,])})
+  weight=sapply(1:n,function(x){length(proj(col1[x]))})
+  mean_plhd=sum(weight*response_vector)/(sum(weight))
+  result.plhd<-append(result.plhd,mean_plhd)
+}
+
+## RUD estimation
+guboa<-function(m){
+  temp=matrix(rep(0,nrow(m)*ncol(m)),c(nrow(m),ncol(m)))
+  for(i in 1:nrow(temp)){
+    for(j in 1:ncol(temp)){
+      temp[i,j]=as.numeric(m[i,j])
+    }
+  }
+  L=as.integer(sqrt(nrow(temp)))
+  recordmatrix=temp
+  addmatrix=temp
+  temp=(temp-1)*L
+  for(k in 1:ncol(temp)){
+    for(l in 1:L){
+      addmatrix[,k][recordmatrix[,k]==l]=sample(0:(L-1),L,replace = FALSE)
+    }
+  }
+  temp=temp+addmatrix+matrix(runif(L^2*ncol(temp),0,1),c(L^2,ncol(temp)))
+  temp=temp/L^2
+  return(temp)
+}
+result.rud<-NULL
+for(hh in 1:100){
+oa=oa.design(nruns = s^2,nlevels = s,nfactors = 2)
+doa=guboa(oa)
+finaldoa=doa
+base_column=sort(m[,1])
+col1=base_column[doa[,1]*49000]
+col2=sapply(1:s^2,function(x){  proj(col1[x])[ceiling(doa[x,2]*length(proj(col1[x])))]  })
+d_rud=cbind(col1,col2)
+result.rud=append(result.rud,mean(sapply(1:s^2,function(x){blackbox(d_rud[x,])})))
+}
+
+## The true mean:
+true_mean
+
+## The mean over the 100 estimation of mu for RS (random sampling), SP (support points) and RUD (Rosenblatt's U-design).
+mean(result.rnd)
+mean(result.plhd)
+mean(result.rud)
+
+## The VAR for RS (random sampling), SP (support points) and RUD (Rosenblatt's U-design).
+var(result.rnd)
+var(result.plhd)
+var(result.rud)
+
+## The MSE for RS (random sampling), SP (support points) and RUD (Rosenblatt's U-design).
+mean((result.rnd-true_mean)^2)
+mean((result.plhd-true_mean)^2)
+mean((result.rud-true_mean)^2)
+
+## Graphic for the distribution.
+par(mfrow=c(1,1))
+plot(density(result.rud),xlim=c(mean(result.rud)-0.3,mean(result.rud)+0.3),main="",xlab="",col="red")
+lines(density(result.rnd))
+lines(density(result.plhd),col="green")
