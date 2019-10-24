@@ -1,0 +1,271 @@
+library(DoE.base)
+set.seed(1)
+
+## For different sample sizes of 40,50,60,80,100, use the following set up for the level of OA and an additional LHD.
+    ## when n=25, use the following setup
+        s=5;n_LHD=0;n_total=25;
+    ## when n=50, use the following setup
+        #s=6;n_LHD=4;n_total=40;
+    ## when n=60, use the following setup
+        #s=8;n_LHD=0;n_total=60;
+    ## when n=80, use the following setup
+        #s=9;n_LHD=0;n_total=80;
+    ## when n=40, use the following setup
+        #s=10;n_LHD=0;n_total=100;
+        
+        ## number of dimention
+        k=3
+
+
+## Generate a large-size data for the borehole function (new distribution in Example 1).   
+basesize=1000000
+m=NULL
+for(j in 1:3)
+{
+  m=cbind(m,runif(basesize,0,1))
+}
+m=cbind(m,m[,2]+m[,3])
+m=cbind(m,m[,1]+m[,2]-m[,3])
+m=cbind(m,m[,1]+m[,2]+m[,3])
+m=m[0.2<m[,4],]
+m=m[m[,4]<0.6,]
+m=m[0.2<m[,5],]
+m=m[m[,5]<0.7,]
+m=m[m[,6]<0.8,]
+
+
+## conditional sample
+indsample1<-function(){
+  m=NULL
+  for(j in 1:3)
+  {
+    m=cbind(m,runif(basesize,0,1))
+  }
+  m=cbind(m,m[,2]+m[,3])
+  m=cbind(m,m[,1]+m[,2]-m[,3])
+  m=cbind(m,m[,1]+m[,2]+m[,3])
+  m=m[0.2<m[,4],]
+  m=m[m[,4]<0.6,]
+  m=m[0.2<m[,5],]
+  m=m[m[,5]<0.7,]
+  m=m[m[,6]<0.8,]
+  return(m[,1])
+}
+indsample2<-function(x1){
+  m=NULL
+  for(j in 1:3)
+  {
+    m=cbind(m,runif(basesize,0,1))
+  }
+  m[,1]=rep(x1,length(m[,1]))
+  m=cbind(m,m[,2]+m[,3])
+  m=cbind(m,m[,1]+m[,2]-m[,3])
+  m=cbind(m,m[,1]+m[,2]+m[,3])
+  m=m[0.2<m[,4],]
+  m=m[m[,4]<0.6,]
+  m=m[0.2<m[,5],]
+  m=m[m[,5]<0.7,]
+  m=m[m[,6]<0.8,]
+  return(m[,2])
+}
+indsample3<-function(x1,x2){
+  m=NULL
+  for(j in 1:3)
+  {
+    m=cbind(m,runif(basesize,0,1))
+  }
+  m[,1]=rep(x1,length(m[,1]))
+  m[,2]=rep(x2,length(m[,2]))
+  m=cbind(m,m[,2]+m[,3])
+  m=cbind(m,m[,1]+m[,2]-m[,3])
+  m=cbind(m,m[,1]+m[,2]+m[,3])
+  m=m[0.2<m[,4],]
+  m=m[m[,4]<0.6,]
+  m=m[0.2<m[,5],]
+  m=m[m[,5]<0.7,]
+  m=m[m[,6]<0.8,]
+  return(m[,3])
+}
+
+## Define the test function.
+blackbox<-function(x){
+  #return(     (x[1]*log(x[2])/(x[1]+x[2])) + (log(x[1])*log(x[3]))^(0.5) + (sin(x[1])/x[3]/x[3])     )
+  #return(     10*x[1]+sin(5*x[2])+x[3]+(-log(x[1]))^(0.5)+7*x[1]*x[2]     )
+  a1=-exp(-3*(x[1]-0.3689)^2-10*(x[2]-0.1170)^2-30*(x[3]-0.2673)^2)
+  a2=-exp(-0.1*(x[1]-0.4699)^2-10*(x[2]-0.4387)^2-35*(x[3]-0.7470)^2)
+  a3=-exp(-3*(x[1]-0.1091)^2-10*(x[2]-0.8732)^2-30*(x[3]-0.5547)^2)
+  a4=-exp(-0.1*(x[1]-0.0381)^2-10*(x[2]-0.0573)^2-35*(x[3]-0.8828)^2)
+  return(a1+1.2*a2+3*a3+3.2*a4)
+}
+
+## Calculate the true mean.
+true_mean=mean(sapply(1:nrow(m),function(x){blackbox(m[x,])}))
+
+## The following two functions generates the original orthogonal array to be used.
+gene_UD2<-function(s,k){
+  m=oa.design(nruns = s^2,nlevels = s,nfactors = 3)
+  temp=matrix(rep(0,nrow(m)*ncol(m)),c(nrow(m),ncol(m)))
+  for(i in 1:nrow(temp)){
+    for(j in 1:ncol(temp)){
+      temp[i,j]=as.numeric(m[i,j])
+    }
+  }
+  oak=temp
+  oakrecord=oak
+  for (j in 1:k) {
+    oak[,j]=sample(1:s,s,replace=FALSE)[oakrecord[,j]]
+  }
+  oakrecord=oak
+  for (j in 1:k) {
+    for(i in 1:s)
+    {
+      oak[oakrecord[,j]==i,j]=sample(1:s,s,replace=FALSE)+(i-1)*s
+    }
+  }
+  #oak=(oak-matrix(runif(s^2*(s+1),0,1),c(s^2,(s+1))))/s^2
+  oak=(oak-0.5)/s^2
+  return(oak)}
+
+
+result.oa=NULL
+result.rnd=NULL
+result.support=NULL
+for (hh in 1:100) {
+  
+
+
+
+## construting OA-based space-filling designs
+d=gene_UD2(s,k)
+dfinal=d
+
+## Data transformation based on the Rosenblatt's transformation. Generate RUD.
+bandwidth=0.02
+for (i in 1:s^2) {
+  alterx1=indsample1()
+  x1=sort(alterx1)[ceiling(length(alterx1)*d[i,1])]
+  dfinal[i,1]=x1
+  alterx2=indsample2(x1)
+  x2=sort(alterx2)[ceiling(length(alterx2)*d[i,2])]
+  dfinal[i,2]=x2
+  alterx3=indsample3(x1,x2)
+  x3=sort(alterx3)[ceiling(length(alterx3)*d[i,3])]
+  dfinal[i,3]=x3
+}
+basesize=20000
+m=NULL
+for(j in 1:3)
+{
+  m=cbind(m,runif(basesize,0,1))
+}
+m=cbind(m,m[,2]+m[,3])
+m=cbind(m,m[,1]+m[,2]-m[,3])
+m=cbind(m,m[,1]+m[,2]+m[,3])
+m=m[0.2<m[,4],]
+m=m[m[,4]<0.6,]
+m=m[0.2<m[,5],]
+m=m[m[,5]<0.7,]
+m=m[m[,6]<0.8,]
+
+## Generate random sample
+ddfinal=m[1:n_total,]
+##############################################
+
+## The sample mean based on RUD and random sampling.
+result.oa=append(result.oa,mean(sapply(1:s^2,function(x){blackbox(dfinal[x,])})))
+result.rnd=append(result.rnd,mean(sapply(1:n_total,function(x){blackbox(ddfinal[x,])})))
+
+
+basesize=20000
+m=NULL
+for(j in 1:3)
+{
+  m=cbind(m,runif(basesize,0,1))
+}
+m=cbind(m,m[,2]+m[,3])
+m=cbind(m,m[,1]+m[,2]-m[,3])
+m=cbind(m,m[,1]+m[,2]+m[,3])
+m=m[0.2<m[,4],]
+m=m[m[,4]<0.6,]
+m=m[0.2<m[,5],]
+m=m[m[,5]<0.7,]
+m=m[m[,6]<0.8,]
+m=m[,1:3]
+
+## estimation using support points
+x_record=m[1:n_total,]
+y_record=m[(n_total+1):500,]
+
+distance<-function(x1,x2){
+  return(sqrt(t(x1-x2)%*%(x1-x2)))
+}
+distance_matrix<-function(D1,D2){
+  dm=NULL
+  for(i in 1:nrow(x_record)){
+    vec=sapply(1:nrow(y_record), function(x){distance(D1[i,],D2[x,])})
+    dm=rbind(dm,vec)
+  }
+  return(dm)
+}
+D=distance_matrix(x_record,y_record)
+D=1/D
+for(h in 1:50){
+  x_last=x_record
+  vec_record_1=x_record
+  vec_record_2=x_record
+  q_vector=sapply(1:n_total, function(x){sum(D[x,])})
+  q_vector=1/q_vector
+  for(i in 1:n_total){
+    xx=rep(0,ncol(m))
+    for(j in setdiff(1:n_total,i)){
+      xx=xx+(x_record[i,]-x_record[j,])*rep((1/distance(x_record[i,],x_record[j,])),ncol(m))
+    }
+    vec_record_1[i,]=xx
+  }
+  for(i in 1:n_total){
+    xx=rep(0,ncol(m))
+    for(j in 1:nrow(y_record)){
+      xx=xx+D[i,j]*y_record[j,]
+    }
+    vec_record_2[i,]=xx
+  }
+  x_record=q_vector*(    nrow(y_record)/nrow(x_record)*vec_record_1+vec_record_2    )
+  D=distance_matrix(x_record,y_record)
+  D=1/D
+}
+ddddfinal=x_record
+result.support=append(result.support,mean(sapply(1:n_total,function(x){blackbox(ddddfinal[x,])})))
+
+print(hh)
+
+
+
+
+
+
+}
+par(mfrow=c(1,1))
+
+## The true mean:
+true_mean
+
+## The mean over the 100 estimation of mu for RS (random sampling), SP (support points) and RUD (Rosenblatt's U-design).
+mean(result.rnd)
+mean(result.support)
+mean(result.oa)
+
+## The VAR for RS (random sampling), SP (support points) and RUD (Rosenblatt's U-design).
+var(result.rnd)
+var(result.support)
+var(result.oa)
+
+## The MSE for RS (random sampling), SP (support points) and RUD (Rosenblatt's U-design).
+mean((result.rnd-true_mean)^2)
+mean((result.support-true_mean)^2)
+mean((result.oa-true_mean)^2)
+
+## Graphic for the distribution.
+par(mfrow=c(1,1))
+plot(density(result.oa),xlim=c(mean(result.oa)-0.1,mean(result.oa)+0.1),main="",xlab="",col="red")
+lines(density(result.rnd))
+lines(density(result.support),col="green")
