@@ -1,0 +1,53 @@
+### This program addresses the exact design efficiency.
+### The small subgroup of sequences to be used is given in the file "part_1.find_opt_sequences.R" and "part_2.find_exact_opt_design.R"
+source("part_1.find_opt_sequences.R")
+source("part_2.find_exact_opt_design.R")
+### The integer programming package to be used in this file is LpSolve.
+library(lpSolve)
+library(permute)
+library(combinat)
+
+effi_cal<-function(designmatrix,opt.type="T"){
+  p=nrow(designmatrix)
+  n=ncol(designmatrix)
+  t=max(as.vector(designmatrix))
+  design.base=find_good_sequence(p,t,model = 1,effect = 1)
+  ident=diag(t) # this is only used for constructional purpose
+  sigma=diag(p) # covariance matrix
+  sigma_inverse=solve(sigma)
+  B.tilde=sigma_inverse-sigma_inverse%*%((rep(1,p))%*%t(rep(1,p)))%*%
+    sigma_inverse/as.numeric(t(rep(1,p))%*%sigma_inverse%*%rep(1,p))
+  design.base=find_good_sequence(p,t,model = 1,effect = 1)
+  bt=diag(1,t)-matrix(1/t,t,t)
+  # The following functions defines the C_ij matrix.
+  s.C00<-function(s){
+    tu=ident[s,]
+    return(t(tu)%*%B.tilde%*%tu)
+  }
+  s.C01<-function(s){
+    tu=ident[s,]
+    fu=rbind(tu[2:p,],rep(0,t))+rbind(rep(0,t),tu[1:(p-1),])-2*tu
+    return(t(tu)%*%B.tilde%*%fu)
+  }
+  s.C11<-function(s){
+    tu=ident[s,]
+    fu=rbind(tu[2:p,],rep(0,t))+rbind(rep(0,t),tu[1:(p-1),])-2*tu
+    return(t(fu)%*%B.tilde%*%fu)
+  }
+  C_xi00=matrix(0,t,t);  C_xi01=matrix(0,t,t);  C_xi11=matrix(0,t,t)
+  for(i in 1:n){
+    C_xi00=C_xi00+s.C00(designmatrix[,i])
+    C_xi01=C_xi01+s.C01(designmatrix[,i])
+    C_xi11=C_xi11+s.C11(designmatrix[,i])
+  }
+  FINALC=C_xi00-C_xi01%*%solve(C_xi11)%*%t(C_xi01)
+  eig=(sort(eigen(FINALC)$values)[2:t])
+  efficiency.A=(t-1)^2/n/design.base$ymax/sum(  1/eig  )
+  efficiency.D=(t-1)/n/design.base$ymax*(prod(eig))^(1/(t-1))
+  efficiency.E=(t-1)*min(eig)/n/design.base$ymax
+  efficiency.T=sum(eig)/n/design.base$ymax
+  if(opt.type=="E"){return(efficiency.E)}
+  if(opt.type=="A"){return(efficiency.A)}
+  if(opt.type=="D"){return(efficiency.D)}
+  if(opt.type=="T"){return(efficiency.T)}
+}
