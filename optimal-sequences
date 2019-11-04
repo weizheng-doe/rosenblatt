@@ -1,0 +1,119 @@
+### This program addresses the optimal sequence to be used for the final design. The inputs should be 
+### (1) number of treatment "t". some check should be made here.
+### (2) number of period "p". some check should be made here.
+### (3) corvariance matrix "sigma".
+### (4) model index, denoted by "model" with model=0 as NULL:
+          # "0" for crossover design      # "1" for interference model
+### (5) the effect to estimate, denoted by "effect" with effect=0 as NULL:
+          # "0" for direct effect         # "1" for total effect
+### (6) the flag of circular/non-circular, denoted by "flag_circular" with effect=0 as NULL:
+          # "0" for non-circular          # "1" for circular
+### Packages to be used include:
+library(nloptr)
+library(partitions)
+library(MASS)
+library(Matrix)
+library(psych)
+library(plyr)
+#### define function "find_good_sequence" as follows
+
+find_good_sequence<-function(p,t,sigma=diag(p),model=0,effect=0,flag_circular=0){
+  error=1e-2
+  v=solve(sigma)
+  tb=v-v%*%matrix(1,p,p)%*%v/sum(v)
+  bt=diag(1,t)-matrix(1/t,t,t)
+  ident=diag(t)
+  sum.parts=restrictedparts(p,t)
+  s.block=NULL
+  direction=NULL
+  setfinal=NULL
+  z_mid=NULL
+  sum.parts=restrictedparts(p,t)
+  s.block=as.matrix(setparts(sum.parts))[,-1] 
+  n.s=ncol(s.block)
+  coefb=matrix(0,n.s,3)
+  for(i in 1:n.s){
+    tu=ident[s.block[,i],]
+    #### all cataglorical inputs are used here
+    if(model==0&&effect==0&&flag_circular==0){fu=rbind(rep(0,t),tu[1:(p-1),])}
+    if(model==0&&effect==0&&flag_circular==1){fu=rbind(tu[p,],tu[1:(p-1),])}
+    if(model==0&&effect==1&&flag_circular==0){fu=rbind(rep(0,t),tu[1:(p-1),])-tu}
+    if(model==0&&effect==1&&flag_circular==1){fu=rbind(tu[p,],tu[1:(p-1),])-tu}
+    if(model==1&&effect==0&&flag_circular==0){fu=rbind(tu[2:p,],rep(0,t))+rbind(rep(0,t),tu[1:(p-1),])}
+    if(model==1&&effect==0&&flag_circular==1){fu=rbind(tu[2:p,],tu[p,])+rbind(tu[p,],tu[1:(p-1),])}
+    if(model==1&&effect==1&&flag_circular==0){fu=rbind(tu[2:p,],rep(0,t))+rbind(rep(0,t),tu[1:(p-1),])-2*tu}
+    if(model==1&&effect==1&&flag_circular==1){fu=rbind(tu[2:p,],tu[p,])+rbind(tu[p,],tu[1:(p-1),])-2*tu}
+    coefb[i,1]=tr(bt%*%t(tu)%*%tb%*%tu%*%bt)
+    coefb[i,2]=tr(bt%*%t(tu)%*%tb%*%fu%*%bt)
+    coefb[i,3]=tr(bt%*%t(fu)%*%tb%*%fu%*%bt)}
+  z_temp=0
+  use_set=NULL
+  use_set_memory=NULL
+  ymax=max(coefb[,1]+2*coefb[,2]*z_temp+coefb[,3]*z_temp^2)
+  for(i in 1:n.s)
+  {
+    if(coefb[i,1]+2*coefb[i,2]*z_temp+coefb[i,3]*z_temp^2==ymax){use_set=c(use_set,i)}
+  }
+  derive_vector=(2*coefb[use_set,2]+2*coefb[use_set,3]*z_temp)
+  flag_vector=sign(derive_vector)
+  use_set_memory=use_set
+  direction=flag_vector[1]
+  z_temp_memory=z_temp
+  #### determine whether the z_temp=0 is already the true zstar
+    # if it is, program stops
+  if(max(flag_vector)>min(flag_vector)){
+    setfinal=use_set;derive_at_these_points=(2*coefb[setfinal,2]+2*coefb[setfinal,3]*z_mid)
+    final.s.block=s.block[,setfinal];z_mid=z_temp;
+    return(list(derive_at_these_points=derive_at_these_points,final.s.block=final.s.block,zstar=z_mid,ymax=ymax))}
+    # if it is not, go on
+  if(max(flag_vector)==min(flag_vector)){
+    direction.temp=direction
+    # the following process finds another edge.
+    while(direction==direction.temp){
+      z_temp_memory=z_temp
+      use_set_memory=use_set
+      use_set=NULL
+      z_temp=z_temp-0.1*direction
+      ymax=max(coefb[,1]+2*coefb[,2]*z_temp+coefb[,3]*z_temp^2)
+      use_set=(1:n.s)[(coefb[,1]+2*coefb[,2]*z_temp+coefb[,3]*z_temp^2)==ymax]
+      derive_vector=(2*coefb[use_set,2]+2*coefb[use_set,3]*z_temp)
+      flag_vector=sign(derive_vector)
+      if(max(flag_vector)>min(flag_vector)){print(use_set);break}
+      direction.temp=flag_vector[1]}
+    # z_left is the left end of the interval containing zstar, use_set_left is the corresponding maxi sequence. same for right.
+    z_left=NULL;z_right=NULL;use_set_left=NULL;use_set_right=NULL
+    # we have decided two number z_temp and z_temp_memory as the two end of interval, 
+    # with corresponding maxi sequence use_set and use_set_memory. Now we decide which pair should be used as left/right combinations.
+    if(direction>0){
+      z_left=z_temp
+      z_right=z_temp_memory
+      use_set_left-use_set
+      use_set_right=use_set_memory}
+    if(direction<0){
+      z_left=z_temp_memory
+      z_right=z_temp
+      use_set_left=use_set_memory
+      use_set_right=use_set}
+    # the break condition is in the iteration and can always be satisfied.
+    while(1>0){
+      use_set=NULL
+      z_mid=(z_left+z_right)/2
+      ymax=max(coefb[,1]+2*coefb[,2]*z_mid+coefb[,3]*z_mid^2)
+      for(i in 1:n.s){
+        if(coefb[i,1]+2*coefb[i,2]*z_mid+coefb[i,3]*z_mid^2==ymax){use_set=c(use_set,i)}}
+      derive_vector=(2*coefb[use_set,2]+2*coefb[use_set,3]*z_mid)
+      flag_vector=sign(derive_vector)
+      if((max(flag_vector)-min(flag_vector))>0){
+        setfinal=use_set;break}
+      direction=flag_vector[1]
+      if(direction<0){
+        z_left=z_mid;z_right=z_right;use_set_left=use_set;use_set_right=use_set_right}
+      if(direction>0){
+        z_left=z_left;z_right=z_mid;use_set_left=use_set_left;use_set_right=use_set}
+      if((z_right-z_left)<0.0001){
+        setfinal=c(use_set_left,use_set_right);break}
+    }
+    derive_at_these_points=(2*coefb[setfinal,2]+2*coefb[setfinal,3]*z_mid)
+    final.s.block=s.block[,setfinal]
+    return(list(derive_at_these_points=derive_at_these_points,final.s.block=final.s.block,zstar=z_mid,ymax=ymax))}
+}
