@@ -1,0 +1,89 @@
+### This program addresses the exact optimal design given the sequences to be used.
+### The small subgroup of sequences to be used is given in the file "part_1.find_opt_sequences.R"
+source("part_1.find_opt_sequences.R")
+### The integer programming package to be used in this file is LpSolve.
+library(lpSolve)
+library(permute)
+library(combinat)
+
+### inputs are here
+n=10
+p=6;t=3
+
+find_good_design<-function(n,p,t){
+
+
+### the searching process
+ident=diag(t) # this is only used for constructional purpose
+sigma=diag(p) # covariance matrix
+sigma_inverse=solve(sigma)
+B.tilde=sigma_inverse-sigma_inverse%*%((rep(1,p))%*%t(rep(1,p)))%*%
+        sigma_inverse/as.numeric(t(rep(1,p))%*%sigma_inverse%*%rep(1,p))
+design.base=find_good_sequence(p,t,model = 1,effect = 1)
+temp.permu=permn(t)
+temp.permu.matrix=NULL
+for(i in 1:prod(1:t)){
+  temp.permu.matrix=rbind(temp.permu.matrix,temp.permu[[i]]) }
+design.base.matrix=design.base$final.s.block
+bt=diag(1,t)-matrix(1/t,t,t)
+# The following functions defines the C_ij matrix.
+s.C00<-function(s){
+  tu=ident[s,]
+  return(t(tu)%*%B.tilde%*%tu)
+}
+s.C01<-function(s){
+  tu=ident[s,]
+  fu=rbind(tu[2:p,],rep(0,t))+rbind(rep(0,t),tu[1:(p-1),])-2*tu
+  return(t(tu)%*%B.tilde%*%fu)
+}
+s.C11<-function(s){
+  tu=ident[s,]
+  fu=rbind(tu[2:p,],rep(0,t))+rbind(rep(0,t),tu[1:(p-1),])-2*tu
+  return(t(fu)%*%B.tilde%*%fu)
+}
+num.col=ncol(design.base$final.s.block)
+restrict.matrix=NULL
+for(i in 1:num.col){
+  for(j in 1:prod(1:t)){
+    restrict.matrix=cbind(restrict.matrix,as.vector(s.C00(temp.permu[[j]][  design.base$final.s.block[,i]  ]))
+                          +as.vector(design.base$zstar*(s.C01(temp.permu[[j]][  design.base$final.s.block[,i]  ])%*%bt)))
+  }
+}
+#restrict.matrix=cbind(restrict.matrix,-as.vector(design.base$ymax*bt/(t-1)))
+restrict.matrix.2=NULL
+for(i in 1:num.col){
+  for(j in 1:prod(1:t)){
+    restrict.matrix.2=cbind(restrict.matrix.2,as.vector(t(s.C01(temp.permu[[j]][  design.base$final.s.block[,i]  ])))
+                          +as.vector(design.base$zstar*(s.C11(temp.permu[[j]][  design.base$final.s.block[,i]  ])%*%bt)))
+  }
+}
+#restrict.matrix.2=cbind(restrict.matrix.2,rep(0,t^2))
+final.restrict=rbind(cbind(cbind(restrict.matrix,-diag(t^2)),matrix(0,t^2,t^2)),
+                     -cbind(cbind(restrict.matrix,diag(t^2)),matrix(0,t^2,t^2)))
+final.restrict.2=rbind(cbind(cbind(restrict.matrix.2,matrix(0,t^2,t^2),-diag(t^2))),
+                       -cbind(cbind(restrict.matrix.2,matrix(0,t^2,t^2),diag(t^2))))
+final.restrict.t=rbind(final.restrict,final.restrict.2)
+final.restrict.t=rbind(final.restrict.t,c(rep(1,num.col*prod(1:t)),rep(0,2*t^2)))
+restrict.vector=c(    n*as.vector(design.base$ymax*bt/(t-1)) , -n*as.vector(design.base$ymax*bt/(t-1)) , rep(0,2*t^2) , n    )
+target.vector=c(   rep(0,num.col*prod(1:t)) , rep(1,2*t^2)   )
+f.dir=c(    rep("<=",t^2),rep("<=",t^2),rep("<=",t^2),rep("<=",t^2),"<="    )
+if(n<=40){result=lp ("min", target.vector, final.restrict.t, f.dir, restrict.vector,int.vec = 1:(num.col*prod(1:t))   )}
+if(n>40){result=lp ("min", target.vector, final.restrict.t, f.dir, restrict.vector   )}
+index=as.integer(result$solution[1:(num.col*prod(1:t))])
+design.mm=NULL
+for(i in 1:num.col){
+  for(j in 1:prod(1:t)){
+    design.mm=cbind(design.mm,temp.permu[[j]][  design.base$final.s.block[,i]  ])
+  }
+}
+final.design=NULL
+for(i in 1:length(index)){
+  while(index[i]>0){
+    final.design=cbind(final.design,design.mm[,i])
+    index[i]=index[i]-1
+  }
+}
+
+return(final.design)
+}
+
