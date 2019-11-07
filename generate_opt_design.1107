@@ -1,0 +1,56 @@
+library(nloptr)
+library(partitions)
+library(MASS)
+library(Matrix)
+library(psych)
+library(plyr)
+library(permute)
+library(combinat)
+library(lpSolve)
+### given p and t, and the optimal sequences.
+
+find.sequences<-function(p=4,t=3){
+  error=1e-2
+  sigma=diag(p)
+  v=solve(sigma)
+  tb=v-v%*%matrix(1,p,p)%*%v/sum(v)
+  bt=diag(1,t)-matrix(1/t,t,t)
+  ident=diag(t)
+  sum.parts=restrictedparts(p,t)
+  s.block=NULL
+  direction=NULL
+  setfinal=NULL
+  z_mid=NULL
+  sum.parts=restrictedparts(p,t)
+  s.block=as.matrix(setparts(sum.parts))[,-1] 
+  n.s=ncol(s.block)
+  c00=matrix(0,n.s);c01=matrix(0,n.s);c02=matrix(0,n.s);c11=matrix(0,n.s);c12=matrix(0,n.s);c22=matrix(0,n.s)
+  for(i in 1:n.s){
+    tu=ident[s.block[,i],]
+    g0=tu
+    g1=rbind(rep(0,t),tu[1:(p-1),])-tu
+    g2=rbind(tu[2:p,],rep(0,t))-tu
+    c00[i]=sum(diag(      bt%*%t(g0)%*%tb%*%g0%*%bt      ))
+    c01[i]=sum(diag(      bt%*%t(g0)%*%tb%*%g1%*%bt      ))
+    c02[i]=sum(diag(      bt%*%t(g0)%*%tb%*%g2%*%bt      ))
+    c11[i]=sum(diag(      bt%*%t(g1)%*%tb%*%g1%*%bt      ))
+    c12[i]=sum(diag(      bt%*%t(g1)%*%tb%*%g2%*%bt      ))
+    c22[i]=sum(diag(      bt%*%t(g2)%*%tb%*%g2%*%bt      ))
+  }
+  maxfunc<-function(x){
+    return(max(c00+2*c01*x[1]+2*c02*x[2]+c11*x[1]^2+2*c12*x[1]*x[2]+c22*x[2]^2))
+  }
+  ymax=nlm(maxfunc,c(1,1))$minimum
+  xach=nlm(maxfunc,c(1,1))$estimate
+  indexset=NULL
+  for(i in 1:n.s){
+    temp=c00[i]+2*c01[i]*xach[1]+2*c02[i]*xach[2]+c11[i]*xach[1]^2+2*c12[i]*xach[1]*xach[2]+c22[i]*xach[2]^2
+    if(temp>(ymax-error)){indexset=append(indexset,i)}
+  }
+  s.block=s.block[,indexset]
+  for(i in 1:nrow(s.block)){
+    s.block=cbind(s.block,s.block[,i][p:1])
+  }
+  s.block=unique(s.block,MARGIN = 2)
+  return(list(xstar=xach,ymax=ymax,sequences=s.block))
+}
