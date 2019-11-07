@@ -1,0 +1,70 @@
+source("part_1.find_opt_sequences.R")
+library(nloptr)
+library(partitions)
+library(MASS)
+library(Matrix)
+library(psych)
+library(plyr)
+library(permute)
+library(combinat)
+library(lpSolve)
+#### calculate efficiency as follows.
+#### the input designmatrix has each column as one point.
+cal.efficiency<-function(designmatrix,p=4,t=3){
+  ymax=find.sequences(p,t)$ymax
+  n=ncol(designmatrix)
+  error=1e-2
+  sigma=diag(p)
+  v=solve(sigma)
+  tb=v-v%*%matrix(1,p,p)%*%v/sum(v)
+  bt=diag(1,t)-matrix(1/t,t,t)
+  ident=diag(t) # this is only used for constructional purpose
+  sigma=diag(p) # covariance matrix
+  sigma_inverse=solve(sigma)
+  B.tilde=sigma_inverse-sigma_inverse%*%((rep(1,p))%*%t(rep(1,p)))%*%
+    sigma_inverse/as.numeric(t(rep(1,p))%*%sigma_inverse%*%rep(1,p))
+  bt=diag(1,t)-matrix(1/t,t,t)
+  #  The following functions defines the C_ij matrix.
+  cs00<-function(s){
+    tu=ident[s,]
+    return(t(tu)%*%B.tilde%*%tu)}
+  cs01<-function(s){
+    tu=ident[s,]
+    ld=rbind(rep(0,t),tu[1:(p-1),])-tu
+  return(t(tu)%*%B.tilde%*%ld)}
+  cs02<-function(s){
+    tu=ident[s,]
+    rd=rbind(tu[2:p,],rep(0,t))-tu
+    return(t(tu)%*%B.tilde%*%rd)}
+  cs11<-function(s){
+    tu=ident[s,]
+    ld=rbind(rep(0,t),tu[1:(p-1),])-tu
+    return(t(ld)%*%B.tilde%*%ld)}
+  cs12<-function(s){
+    tu=ident[s,]
+    ld=rbind(rep(0,t),tu[1:(p-1),])-tu
+    rd=rbind(tu[2:p,],rep(0,t))-tu
+  return(t(ld)%*%B.tilde%*%rd)}
+  cs22<-function(s){
+    tu=ident[s,]
+    rd=rbind(tu[2:p,],rep(0,t))-tu
+    return(t(rd)%*%B.tilde%*%rd)}
+
+  C_xi00=matrix(0,t,t);  C_xi01=matrix(0,t,t);  C_xi02=matrix(0,t,t)
+  C_xi11=matrix(0,t,t);  C_xi12=matrix(0,t,t);  C_xi22=matrix(0,t,t)
+  for(i in 1:n){
+    C_xi00=C_xi00+cs00(designmatrix[,i])
+    C_xi01=C_xi01+cs01(designmatrix[,i])
+    C_xi02=C_xi02+cs02(designmatrix[,i])
+    C_xi11=C_xi11+cs11(designmatrix[,i])
+    C_xi12=C_xi12+cs12(designmatrix[,i])
+    C_xi22=C_xi22+cs22(designmatrix[,i])
+  }
+  FINALC=C_xi00-cbind(C_xi01,C_xi02)%*%solve(rbind(cbind(C_xi11,C_xi12),cbind(t(C_xi12),C_xi22)))%*%t(cbind(C_xi01,C_xi02))
+  eig=(sort(eigen(FINALC)$values)[2:t])
+  efficiency.A=(t-1)^2/n/ymax/sum(  1/eig  )
+  efficiency.D=(t-1)/n/ymax*(prod(eig))^(1/(t-1))
+  efficiency.E=(t-1)*min(eig)/n/ymax
+  efficiency.T=sum(eig)/n/ymax
+  return(list(  efficiency.A=efficiency.A,  efficiency.D=efficiency.D,  efficiency.E=efficiency.E,  efficiency.T=efficiency.T))
+  }
